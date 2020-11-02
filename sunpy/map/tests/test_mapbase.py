@@ -272,6 +272,9 @@ def test_cmap(generic_map):
 def test_coordinate_frame(aia171_test_map):
     frame = aia171_test_map.coordinate_frame
     assert isinstance(frame, sunpy.coordinates.Helioprojective)
+    aia171_test_map.coordinate_frame.observer.lat
+    aia171_test_map.observer_coordinate.frame.lat
+
     assert frame.observer.lat == aia171_test_map.observer_coordinate.frame.lat
     assert frame.observer.lon == aia171_test_map.observer_coordinate.frame.lon
     assert frame.observer.radius == aia171_test_map.observer_coordinate.frame.radius

@@ -62,16 +62,6 @@ class AIAMap(GenericMap):
             self.meta['bunit'] = 'ct/s'
 
     @property
-    def _supported_observer_coordinates(self):
-        return [(('haex_obs', 'haey_obs', 'haez_obs'), {'x': self.meta.get('haex_obs'),
-                                                        'y': self.meta.get('haey_obs'),
-                                                        'z': self.meta.get('haez_obs'),
-                                                        'unit': u.m,
-                                                        'representation_type': CartesianRepresentation,
-                                                        'frame': HeliocentricMeanEcliptic})
-                ] + super()._supported_observer_coordinates
-
-    @property
     def observatory(self):
         """
         Returns the observatory.

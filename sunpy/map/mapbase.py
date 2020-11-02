@@ -31,6 +31,7 @@ import sunpy.visualization.colormaps
 from sunpy import config, log
 from sunpy.coordinates import HeliographicCarrington, HeliographicStonyhurst, get_earth, sun
 from sunpy.coordinates.utils import get_rectangle_coordinates
+from sunpy.coordinates.wcs_utils import supported_observer_systems, supported_aux_systems
 from sunpy.image.resample import resample as sunpy_image_resample
 from sunpy.image.resample import reshape_image_to_4d_superpixel
 from sunpy.sun import constants
@@ -476,12 +477,24 @@ class GenericMap(NDData):
         if w2.wcs.ctype[1].lower() in ("solar-y", "solar_y"):
             w2.wcs.ctype[1] = 'HPLT-TAN'
 
-        # GenericMap.coordinate_frame is implemented using this method, so we
-        # need to do this only based on .meta.
-        ctypes = {c[:4] for c in w2.wcs.ctype}
-        # Check that the ctypes contains one of these three pairs of axes.
-        if ({'HPLN', 'HPLT'} <= ctypes or {'SOLX', 'SOLY'} <= ctypes or {'CRLN', 'CRLT'} <= ctypes):
-            w2.heliographic_observer = self.observer_coordinate
+        # Get observer information
+        observer = self.observer_coordinate
+        # Transform to stonyhurst if not in a system supported by FITS
+        if not isinstance(observer, (HeliographicStonyhurst, HeliographicCarrington)):
+            observer = observer.transform_to(HeliographicStonyhurst(obstime=self.date))
+
+        header = w2.to_header()
+        for system in supported_aux_systems:
+            for akw in system.aux_kw:
+                header.pop(akw, None)
+        w2 = astropy.wcs.WCS(header)
+
+        # Set the auxillary WCS parameters
+        for system in supported_aux_systems:
+            if isinstance(observer, system.frame):
+                for fkw, ckw, unit in zip(system.fits_keywords, system.coord_kwargs, system.units):
+                    value = getattr(observer, ckw).to_value(unit)
+                    w2.wcs.aux.setattr(kw, value)
 
         # Validate the WCS here.
         w2.wcs.set()
@@ -806,75 +819,27 @@ class GenericMap(NDData):
         return SpatialPair(self.meta.get('ctype1', 'HPLN-   '),
                            self.meta.get('ctype2', 'HPLT-   '))
 
-    @property
-    def _supported_observer_coordinates(self):
-        """
-        A list of supported coordinate systems.
-
-        This is a list so it can easily maintain a strict order. The list of
-        two element tuples, the first item in the tuple is the keys that need
-        to be in the header to use this coordinate system and the second is the
-        kwargs to SkyCoord.
-        """
-        return [(('hgln_obs', 'hglt_obs', 'dsun_obs'), {'lon': self.meta.get('hgln_obs'),
-                                                        'lat': self.meta.get('hglt_obs'),
-                                                        'radius': self.meta.get('dsun_obs'),
-                                                        'unit': (u.deg, u.deg, u.m),
-                                                        'frame': "heliographic_stonyhurst"}),
-                (('crln_obs', 'crlt_obs', 'dsun_obs'), {'lon': self.meta.get('crln_obs'),
-                                                        'lat': self.meta.get('crlt_obs'),
-                                                        'radius': self.meta.get('dsun_obs'),
-                                                        'unit': (u.deg, u.deg, u.m),
-                                                        'frame': "heliographic_carrington"}), ]
-
     def _remove_existing_observer_location(self):
         """
         Remove all keys that this map might use for observer location.
         """
-        all_keys = expand_list([e[0] for e in self._supported_observer_coordinates])
-        for key in all_keys:
-            self.meta.pop(key)
+        for system in supported_observer_systems:
+            for key in system.fits_keywords:
+                self.meta.pop(key, None)
 
     @property
     def observer_coordinate(self):
         """
         The Heliographic Stonyhurst Coordinate of the observer.
         """
-        missing_meta = {}
-        for keys, kwargs in self._supported_observer_coordinates:
-            meta_list = [k in self.meta for k in keys]
-            if all(meta_list):
-                sc = SkyCoord(obstime=self.date, **kwargs)
-
-                # We need to specially handle an observer location provided in Carrington
-                # coordinates.  To create the observer coordinate, we need to specify the
-                # frame, but defining a Carrington frame normally requires specifying the
-                # frame's observer.  This loop is the problem.  Instead, since the
-                # Carrington frame needs only the Sun-observer distance component from the
-                # frame's observer, we create the same frame using a fake observer that has
-                # the same Sun-observer distance.
-                if isinstance(sc.frame, HeliographicCarrington):
-                    fake_observer = HeliographicStonyhurst(0*u.deg, 0*u.deg, sc.radius,
-                                                           obstime=sc.obstime)
-                    fake_frame = sc.frame.replicate(observer=fake_observer)
-                    hgs = fake_frame.transform_to(HeliographicStonyhurst(obstime=sc.obstime))
-
-                    # HeliographicStonyhurst doesn't need an observer, but adding the observer
-                    # facilitates a conversion back to HeliographicCarrington
-                    return SkyCoord(hgs, observer=hgs)
-
-                return sc.heliographic_stonyhurst
-            elif any(meta_list) and not set(keys).isdisjoint(self.meta.keys()):
-                if not isinstance(kwargs['frame'], str):
-                    kwargs['frame'] = kwargs['frame'].name
-                missing_meta[kwargs['frame']] = set(keys).difference(self.meta.keys())
-
-        warning_message = "".join(
-            [f"For frame '{frame}' the following metadata is missing: {','.join(keys)}\n" for frame, keys in missing_meta.items()])
-        warning_message = "Missing metadata for observer: assuming Earth-based observer.\n" + warning_message
-        warnings.warn(warning_message, SunpyMetadataWarning, stacklevel=3)
-
-        return get_earth(self.date)
+        try:
+            return sunpy.coordinates.wcs_utils.observer_coordinate(self.meta)
+        except ValueError as e:
+            # Default to earth observer if we don't have the right metadata
+            warning_message = ("Missing metadata for observer: assuming Earth-based observer.\n" +
+                               str(e))
+            warnings.warn(warning_message, SunpyMetadataWarning, stacklevel=3)
+            return get_earth(self.date)
 
     @property
     def heliographic_latitude(self):
