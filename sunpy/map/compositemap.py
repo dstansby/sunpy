@@ -301,44 +301,11 @@ class CompositeMap:
 
         return self._maps[index].draw_limb(axes=axes, **kwargs)
 
-    @u.quantity_input
-    def draw_grid(self, index=None, axes=None, grid_spacing: u.deg = 20*u.deg, **kwargs):
-        """Draws a grid over the surface of the Sun.
-
-        Parameters
-        ----------
-        index: int
-            Index to determine which map to use to draw grid.
-
-        axes: `~matplotlib.axes.Axes` or None
-            Axes to plot limb on or None to use current axes.
-
-        grid_spacing : `float`
-            Spacing (in degrees) for longitude and latitude grid.
-
-        Returns
-        -------
-        `matplotlib.axes.Axes` object
-
-        Notes
-        -----
-        Keyword arguments are passed onto `sunpy.map.mapbase.GenericMap.draw_grid`.
+    def draw_grid(self):
         """
-        needed_attrs = ['rsun_meters', 'dsun', 'heliographic_latitude',
-                        'heliographic_longitude']
-        if index is None:
-            for i, amap in enumerate(self._maps):
-                if all([hasattr(amap, k) for k in needed_attrs]):
-                    index = i
-                    break
-
-        index_check = all([hasattr(self._maps[index], k) for k in needed_attrs])
-        if not index_check or index is None:
-            raise ValueError("Specified index does not have all"
-                             " the required attributes to draw grid.")
-
-        ax = self._maps[index].draw_grid(axes=axes, grid_spacing=grid_spacing, **kwargs)
-        return ax
+        This is not implemented for CompositeMaps.
+        """
+        raise NotImplementedError('Drawing a grid on a CompositeMap is not currently implemented')
 
     def plot(self, axes=None, annotate=True,
              title="SunPy Composite Plot", **matplot_args):
