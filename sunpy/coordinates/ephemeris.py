@@ -216,8 +216,13 @@ def get_horizons_coord(body, time='now', id_type='majorbody', *, include_velocit
         If 'majorbody', search by name for planets, satellites, or other major bodies.
         If 'smallbody', search by name for asteroids or comets.
         If 'id', search by ID number.
-    time : {parse_time_types}
-        Time to use in a parse_time-compatible format
+    time : {parse_time_types}, `dict`
+        Time to use in a parse_time-compatible format.
+
+        Alternatively, this can be a dictionary defining a range of times and
+        dates; the range dictionary has to be of the form
+        {{'start':’YYYY-MM-DD [HH:MM:SS]’, 'stop':’YYYY-MM-DD [HH:MM:SS]’, 'step':’n[y|d|m|s]’}}.
+        For more information see the docstring of `astroquery.jplhorizons.HorizonsClass`.
 
     Keyword Arguments
     -----------------
@@ -275,14 +280,18 @@ def get_horizons_coord(body, time='now', id_type='majorbody', *, include_velocit
      (d_lon, d_lat, d_radius) in (arcsec / s, arcsec / s, km / s)
         (-0.00514936, -0.00205857, 8.89781348)>
     """
-    obstime = parse_time(time)
-    array_time = np.reshape(obstime, (-1,))  # Convert to an array, even if scalar
+    if isinstance(time, dict):
+        epochs = time
+    else:
+        obstime = parse_time(time)
+        array_time = np.reshape(obstime, (-1,))  # Convert to an array, even if scalar
+        epochs = array_time.tdb.jd.tolist()
 
     # Import here so that astroquery is not a module-level dependency
     from astroquery.jplhorizons import Horizons
     query = Horizons(id=body, id_type=id_type,
                      location='500@10',      # Heliocentric (mean ecliptic)
-                     epochs=array_time.tdb.jd.tolist())  # Time must be provided in JD TDB
+                     epochs=epochs)  # Time must be provided in JD TDB
     try:
         result = query.vectors()
     except Exception as e:  # Catch and re-raise all exceptions, and also provide query URL if generated
@@ -294,13 +303,17 @@ def get_horizons_coord(body, time='now', id_type='majorbody', *, include_velocit
     log.info(f"Obtained JPL HORIZONS location for {result[0]['targetname']}")
     log.debug(f"See the raw output from the JPL HORIZONS query at {query.uri}")
 
-    # JPL HORIZONS results are sorted by observation time, so this sorting needs to be undone.
-    # Calling argsort() on an array returns the sequence of indices of the unsorted list to put the
-    # list in order.  Calling argsort() again on the output of argsort() reverses the mapping:
-    # the output is the sequence of indices of the sorted list to put that list back in the
-    # original unsorted order.
-    unsorted_indices = obstime.argsort().argsort()
-    result = result[unsorted_indices]
+    if isinstance(time, dict):
+        # TODO: Create obstime from the result
+        pass
+    else:
+        # JPL HORIZONS results are sorted by observation time, so this sorting needs to be undone.
+        # Calling argsort() on an array returns the sequence of indices of the unsorted list to put the
+        # list in order.  Calling argsort() again on the output of argsort() reverses the mapping:
+        # the output is the sequence of indices of the sorted list to put that list back in the
+        # original unsorted order.
+        unsorted_indices = obstime.argsort().argsort()
+        result = result[unsorted_indices]
 
     vector = CartesianRepresentation(result['x'], result['y'], result['z'])
     if include_velocity:
