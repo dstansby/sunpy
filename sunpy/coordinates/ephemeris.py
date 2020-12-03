@@ -279,6 +279,13 @@ def get_horizons_coord(body, time='now', id_type='majorbody', *, include_velocit
         (-25.16107572, 14.59098456, 3.17667662)
      (d_lon, d_lat, d_radius) in (arcsec / s, arcsec / s, km / s)
         (-0.00514936, -0.00205857, 8.89781348)>
+
+    Query the location of Solar Orbiter at a set of 12 regularly sampled times
+    >>> get_horizons_coord('Solar Orbiter',
+                           time={'start': '2020-12-01',
+                                 'stop': '2020-12-02',
+                                 'step': '12'})
+    INFO: Obtained JPL HORIZONS location for Solar Orbiter (spacecraft) (-144 [sunpy.coordinates.ephemeris]
     """
     if isinstance(time, dict):
         epochs = time
@@ -304,8 +311,7 @@ def get_horizons_coord(body, time='now', id_type='majorbody', *, include_velocit
     log.debug(f"See the raw output from the JPL HORIZONS query at {query.uri}")
 
     if isinstance(time, dict):
-        # TODO: Create obstime from the result
-        pass
+        obstime = parse_time(result['datetime_jd'], format='jd')
     else:
         # JPL HORIZONS results are sorted by observation time, so this sorting needs to be undone.
         # Calling argsort() on an array returns the sequence of indices of the unsorted list to put the
